@@ -21,15 +21,17 @@ package com.test;
 import com.flink.data.Person;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.JobExecutionResult;
-import org.apache.flink.api.common.functions.FlatMapFunction;
-import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.functions.ReduceFunction;
+import org.apache.flink.api.common.functions.*;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.aggregation.Aggregations;
+import org.apache.flink.api.java.functions.FormattingMapper;
 import org.apache.flink.api.java.io.CsvInputFormat;
 import org.apache.flink.api.java.operators.DataSource;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.streaming.api.TimeCharacteristic;
@@ -255,5 +257,17 @@ public class BatchJob {
 		var singleOperatorDataStream = dataStream1.keyBy(0)
 				.window(SlidingEventTimeWindows.of(Time.hours(1), Time.minutes(10)))
 				.reduce((t1, t2) -> new Tuple2<>(t1.f0, t1.f1 + t2.f1));
+
+		DataSet dataSet1 = environment.fromElements(new Tuple2<Integer, String>(1, "fangpc"), new Tuple2<Integer, String>(2, "fangpengcheng"),
+				new Tuple2<Integer, String>(3, "sam"));
+		DataSet dataSet2 = environment.fromElements(new Tuple2<Double, Integer>(34444.0, 1), new Tuple2<Double, Integer>(55555555.0, 4), new Tuple2<Double, Integer>(36666666.0, 2));
+		dataSet1.leftOuterJoin(dataSet2).where(0).equalTo(1).with(new JoinFunction() {
+			@Override
+			public Object join(Object o, Object o2) throws Exception {
+				if (o2 == null) {
+					return 
+				}
+			}
+		})
 	}
 }

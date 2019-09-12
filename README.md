@@ -488,3 +488,127 @@ dataStream1.windowAll();
         - 增量聚合函数计算性能较高，占用存储空间少，不缓存原始数据，只维护中间结果状态值。
 
         - 全量窗口函数使用的代价较高，性能比较弱，主要是算子需要对所有属于该窗口的接入数据进行缓存，然后等到窗口触发的时候，对所有的原始数据进行汇总计算。
+
+# 第五章 、DataSet API介绍与使用
+    - Flink中的DataSet程序是实现数据集转换的常规程序（例如，Filter，映射，连接，分组）。数据集最初是从某些来源创建的（例如，通过读取文件或从本地集合创建）。结果通过接收器返回，接收器可以例如将数据写入（分布式）文件或标准输出（例如命令行终端）。Flink程序可以在各种环境中运行，独立运行或嵌入其他程序中。执行可以在本地JVM中执行，也可以在许多计算机的集群上执行。
+## 数据集转换
+    - 数据转换将一个或多个DataSet转换为新的DataSet。程序可以将多个转换组合到复杂的程序集中。
+    - Map: 将一个数据元并生成一个数据元。
+```java
+DataSet dataSet = environment.fromElements("1", "2", "3", "4", "5");
+dataSet.map(new MapFunction<String, Integer>() {
+
+    @Override
+    public Integer map(String s) throws Exception {
+        return Integer.parseInt(s);
+    }
+}).print();
+```
+
+    - FaltMap: 将一个数据元生成零个、一个、多个数据元
+```java
+var singleOperatorDataStream = dataStream1.keyBy(0)
+        .window(SlidingEventTimeWindows.of(Time.hours(1), Time.minutes(10)))
+        .reduce((t1, t2) -> new Tuple2<>(t1.f0, t1.f1 + t2.f1));
+
+DataSet dataSet = environment.fromElements("hello world ddd d dd!");
+dataSet.flatMap(new FlatMapFunction<String, String>() {
+    @Override
+    public void flatMap(String s, Collector<String> collector) throws Exception {
+        Arrays.stream(s.split(" ")).forEach(str -> collector.collect(str));
+    }
+}).print();
+```
+
+    - MapPartition: 功能和Map函数相似，只是MapPartition操作是在DataSet中基于分区对数据进行处理，函数调用中会按照分区将数据通过Iteator的形式传入，并返回任意数量的结果值。
+```java
+DataSet dataSet = environment.fromElements("hello world ddd d dd!", "a", "b", "c", "d");
+dataSet.mapPartition(new MapPartitionFunction<String, Long>() {
+    public void mapPartition(Iterable<String> values, Collector<Long> out) {
+        long c = 0;
+        for (String s : values) {
+            c++;
+        }
+        out.collect(c);
+    }
+}).print();
+```
+
+    - Filter: 计算每个数据元的布尔函数，并保存函数返回true的数据元。
+```java
+var singleOperatorDataStream = dataStream1.keyBy(0)
+        .window(SlidingEventTimeWindows.of(Time.hours(1), Time.minutes(10)))
+        .reduce((t1, t2) -> new Tuple2<>(t1.f0, t1.f1 + t2.f1));
+
+DataSet dataSet = environment.fromElements(1, 100, 2000, 30000);
+dataSet.filter(new FilterFunction<Integer>() {
+    @Override
+    public boolean filter(Integer integer) throws Exception {
+        return integer > 100;
+    }
+}).print();
+}
+```
+    - Reduce：通过两两合并，将数据集中的元素合并成一个元素
+```java
+DataSet dataSet = environment.fromElements(1, 100, 2000, 30000);
+dataSet.reduce(new ReduceFunction<Integer>(){
+
+    @Override
+    public Integer reduce(Integer integer, Integer t1) throws Exception {
+        return integer + t1;
+    }
+}).print();
+```
+
+    - ReduceGroup：将一组数据元组合成一个或多个数据元。ReduceGroup可以应用于完整数据集或分组数据集。
+```java
+DataSet dataSet = environment.fromElements(1, 100, 2000, 30000);
+dataSet.reduceGroup(new RichGroupReduceFunction<Integer, Integer>() {
+
+    @Override
+    public void reduce(Iterable<Integer> iterable, Collector<Integer> collector) throws Exception {
+        int prefixSum = 0;
+        for (Integer integer : iterable) {
+            prefixSum += integer;
+            collector.collect(prefixSum);
+        }
+    }
+}).print();
+```
+
+    - Aggregate:将一组元素值合并成单个值，可以在整个DataSet数据集上使用，也可以和Group Data Set结合使用
+```java
+DataSet dataSet = environment.fromElements(new Tuple3<Integer, String, Long>(12, "Alice", (long) 34), new Tuple3<Integer, String, Long>(12, "Alice", (long) 34),
+        new Tuple3<Integer, String, Long>(12, "Alice", (long) 34), new Tuple3<Integer, String, Long>(12, "Alice", (long) 32));
+
+dataSet.aggregate(Aggregations.SUM, 0).aggregate(Aggregations.MIN, 2).print();
+
+// 运行结果：
+// (48,Alice,32)
+```
+
+    - Distinct：返回数据集的不同数据元。它相对于数据元的所有字段或字段子集从输入DataSet中删除重复条目
+```java
+DataSet dataSet = environment.fromElements(22222, 1, 1, 2, 3, 3, 33);
+dataSet.distinct().print();
+
+// 运行结果：
+3
+33
+1
+2
+22222
+```
+    - Join: 通过创建在其键上相等的所有数据元对来连接两个数据集。
+```java
+DataSet dataSet1 = environment.fromElements(new Tuple2<Integer, String>(1, "fangpc"), new Tuple2<Integer, String>(2, "fangpengcheng"),
+        new Tuple2<Integer, String>(3, "sam"));
+DataSet dataSet2 = environment.fromElements(new Tuple2<Double, Integer>(34444.0, 1), new Tuple2<Double, Integer>(55555555.0, 3), new Tuple2<Double, Integer>(36666666.0, 2));
+dataSet1.join(dataSet2).where(0).equalTo(1).print();
+
+// 运行结果
+((3,sam),(5.5555555E7,3))
+((1,fangpc),(34444.0,1))
+((2,fangpengcheng),(3.6666666E7,2))
+```
